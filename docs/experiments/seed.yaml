@@ -1,0 +1,126 @@
+# 种子数据 · 确定性快照
+# 冻结后由快照脚本一次性写入并打成 dump；每次 trial 前恢复（CONTRACT I2）。
+# 所有 UUID 固定，禁止 gen_random_uuid()。
+# 时间锚点 seed_now：建立快照时一次性计算，之后冻结。
+
+meta:
+  id: crm-bench-seed-v1
+  revision: 1
+  tables: [crm_pipelines, crm_stages, contacts, crm_leads, conversations]
+  invariant_check:
+    tables: 188
+    functions: 436
+    rls_policies: 550
+  snapshot_ttl_days: 7
+
+organization:
+  id: 00000000-0000-4000-8000-000000000001
+  name: "Bench Org"
+  slug: "bench-org"
+
+users:
+  # 仅用于 owner_user_id 的归属与审计主体；不参与任何断言
+  - id: 00000000-0000-4000-8000-000000000101
+    email: bench-manager@pi-native.test
+    role: manager
+  - id: 00000000-0000-4000-8000-000000000102
+    email: bench-agent@pi-native.test
+    role: agent
+
+pipelines:
+  - id: 00000000-0000-4000-8000-0000000000a1
+    name: "Vendas"
+    slug: "vendas"
+    is_default: true
+    position: 1000
+
+stages:
+  - { id: 00000000-0000-4000-8000-0000000000b1, name: "Novo",          slug: "novo",          position: 1000, is_won: false, is_lost: false }
+  - { id: 00000000-0000-4000-8000-0000000000b2, name: "Qualificação",  slug: "qualificacao",  position: 2000, is_won: false, is_lost: false }
+  - { id: 00000000-0000-4000-8000-0000000000b3, name: "Proposta",      slug: "proposta",      position: 3000, is_won: false, is_lost: false }
+  - { id: 00000000-0000-4000-8000-0000000000b4, name: "Negociação",    slug: "negociacao",    position: 4000, is_won: false, is_lost: false }
+  - { id: 00000000-0000-4000-8000-0000000000b5, name: "Fechado",       slug: "fechado",       position: 5000, is_won: true,  is_lost: false }
+  - { id: 00000000-0000-4000-8000-0000000000b6, name: "Perdido",       slug: "perdido",       position: 6000, is_won: false, is_lost: true  }
+
+contacts:
+  - { id: 00000000-0000-4000-8000-0000000000c1, name: "Ana Ribeiro",    email: "ana.ribeiro@example.invalid",    phone_e164: "+5511900000001" }
+  - { id: 00000000-0000-4000-8000-0000000000c2, name: "Bruno Costa",    email: "bruno.costa@example.invalid",    phone_e164: "+5511900000002" }
+  - { id: 00000000-0000-4000-8000-0000000000c3, name: "Carla Menezes",  email: "carla.menezes@example.invalid",  phone_e164: "+5511900000003" }
+
+# 关键设计：last_activity_at 用「seed_now − N 天」，形成大间隔，
+# 使「超过 7 天未跟进」的判据在快照 7 天有效期内保持稳定。
+leads:
+  - id: 00000000-0000-4000-8000-0000000000d1
+    title: "Renovação anual — Ana Ribeiro"
+    contact_id: 00000000-0000-4000-8000-0000000000c1
+    stage_id: 00000000-0000-4000-8000-0000000000b3   # Proposta
+    status: open
+    value_cents: 1200000
+    currency: BRL
+    last_activity_at: "$seed_now - 12 days"           # 停滞
+    tags: []
+
+  - id: 00000000-0000-4000-8000-0000000000d2
+    title: "Implantação — Bruno Costa"
+    contact_id: 00000000-0000-4000-8000-0000000000c2
+    stage_id: 00000000-0000-4000-8000-0000000000b2   # Qualificação
+    status: open
+    value_cents: 800000
+    currency: BRL
+    last_activity_at: "$seed_now - 2 days"            # 新鲜
+    tags: []
+
+  - id: 00000000-0000-4000-8000-0000000000d3
+    title: "Expansão filial — Carla Menezes"
+    contact_id: 00000000-0000-4000-8000-0000000000c3
+    stage_id: 00000000-0000-4000-8000-0000000000b2   # Qualificação
+    status: open
+    value_cents: 2500000
+    currency: BRL
+    last_activity_at: "$seed_now - 20 days"           # 停滞（最久之一）
+    tags: []
+
+  - id: 00000000-0000-4000-8000-0000000000d4
+    title: "Contrato legado — Ana Ribeiro"
+    contact_id: 00000000-0000-4000-8000-0000000000c1
+    stage_id: 00000000-0000-4000-8000-0000000000b1   # Novo
+    status: open
+    value_cents: 300000
+    currency: BRL
+    last_activity_at: "$seed_now - 45 days"           # 停滞最久
+    tags: []
+
+  - id: 00000000-0000-4000-8000-0000000000d5
+    title: "Renovação premium — Bruno Costa"
+    contact_id: 00000000-0000-4000-8000-0000000000c2
+    stage_id: 00000000-0000-4000-8000-0000000000b4   # Negociação
+    status: open
+    value_cents: 4200000
+    currency: BRL
+    last_activity_at: "$seed_now - 1 day"             # 新鲜
+    tags: []
+
+conversations:
+  - id: 00000000-0000-4000-8000-0000000000e1
+    contact_id: 00000000-0000-4000-8000-0000000000c1
+    channel: whatsapp
+    last_inbound: "$seed_now - 3 days"
+    messages:
+      - { direction: inbound,  body: "Oi, preciso entender como fica a renovação anual deste ano.", at: "$seed_now - 3 days" }
+      - { direction: outbound, body: "Claro, Ana. Vou verificar as condições e te retorno.", at: "$seed_now - 3 days + 10 minutes" }
+
+  - id: 00000000-0000-4000-8000-0000000000e2
+    contact_id: 00000000-0000-4000-8000-0000000000c3
+    channel: whatsapp
+    last_inbound: "$seed_now - 1 day"
+    messages:
+      - { direction: inbound,  body: "Qual é o prazo de implantação para uma filial nova?", at: "$seed_now - 1 day" }
+
+knowledge_base:
+  # 刻意留空：T02 依赖「知识库没有对应内容」来检验模型是否诚实说明缺依据。
+  documents: []
+
+notes:
+  - "tags 初始为空数组，T06 断言新增 tag 后为 {_contains: \"prioridade\"}。"
+  - "status 由数据库触发器管理，种子只写初始值，任何任务都不得直接改 status（用 crm_move_lead_stage）。"
+  - "会话仅两条，且不含任何承诺性内容，供 T01 / T09 使用。"

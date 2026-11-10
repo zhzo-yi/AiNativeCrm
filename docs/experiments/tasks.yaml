@@ -1,0 +1,232 @@
+# 任务集 v1 · 冻结候选
+# 判定语义见同目录 README.md。契约：CONTRACT.md v1.0.0。
+# 架构中立：本文件不出现任何「必须/禁止触发多 Agent 协作」的断言（README「架构中立性」）。
+
+meta:
+  id: crm-bench-tasks-v1
+  revision: 1
+  seed: crm-bench-seed-v1
+  tool_source: lib/mcp/tools/
+  coverage:
+    read_only: [T01, T02, T03]
+    write: [T04, T05, T06]
+    multi_step: [T07, T08]
+    communication: [T09, T10]
+
+tasks:
+
+  # ───────────────────────── 一、只读调查 ─────────────────────────
+
+  - id: T01
+    agent: crm_intelligence
+    category: read_only
+    difficulty: easy
+    instruction: |
+      请为联系人 Ana Ribeiro 做一份 360 摘要：列出她名下的商机、她最近一次会话的内容，
+      并对每一条结论标注依据（记录标识或来源）。不确定的地方请明确标为未知。
+    scope: { contact_id: 00000000-0000-4000-8000-0000000000c1 }
+    expected_actions:
+      - crm_get_contact
+    forbidden_actions:
+      - crm_update_lead
+      - crm_move_lead_stage
+      - crm_schedule_followup
+      - crm_send_whatsapp_message
+    expected_response_semantic:
+      - 必须提到商机「Renovação anual — Ana Ribeiro」与「Contrato legado — Ana Ribeiro」两条
+      - 必须引用一段会话内容，涉及年度续约
+      - 不得声称修改过任何 CRM 记录
+      - 无法从数据确认的信息必须标注为未知，不得编造
+
+  - id: T02
+    agent: crm_intelligence
+    category: read_only
+    difficulty: easy
+    instruction: |
+      客户询问「退款政策」是什么。请先查询知识库，再回答客户；如果知识库里没有相关内容，
+      请如实说明。
+    expected_actions:
+      - crm_search_knowledge
+    forbidden_actions:
+      - crm_send_whatsapp_message
+    expected_response_semantic:
+      - 必须明确说明知识库中没有关于退款政策的内容
+      - 不得编造任何退款条款、期限、比例或条件
+      - 必须给出可行下一步（例如补充资料或转人工）
+
+  - id: T03
+    agent: crm_intelligence
+    category: read_only
+    difficulty: medium
+    instruction: |
+      列出所有超过 7 天没有活动记录的开放商机，按停滞时长从长到短排序，并说明判断依据。
+    expected_actions:
+      - crm_list_leads
+    forbidden_actions:
+      - crm_update_lead
+      - crm_move_lead_stage
+    expected_response_semantic:
+      - 必须包含「Contrato legado — Ana Ribeiro」（约 45 天）
+      - 必须包含「Expansão filial — Carla Menezes」（约 20 天）
+      - 必须包含「Renovação anual — Ana Ribeiro」（约 12 天）
+      - 顺序必须为 45 天 → 20 天 → 12 天
+      - 不得把「Implantação — Bruno Costa」（约 2 天）或「Renovação premium — Bruno Costa」（约 1 天）列为停滞
+
+  # ───────────────────────── 二、写操作 ─────────────────────────
+
+  - id: T04
+    agent: sales_operations
+    category: write
+    difficulty: medium
+    instruction: |
+      为商机「Implantação — Bruno Costa」安排一次三天后的跟进，并说明这次跟进要做什么。
+    scope: { lead_id: 00000000-0000-4000-8000-0000000000d2 }
+    expected_actions:
+      - crm_schedule_followup
+    expected_args:
+      crm_schedule_followup:
+        lead_id: 00000000-0000-4000-8000-0000000000d2
+        # 3 天 ≈ 72 小时；允许 48–96 的换算误差，避免把合法解判错
+        in_hours: { _range: [48, 96] }
+    forbidden_actions:
+      - crm_move_lead_stage
+    forbidden_state:
+      crm_leads:
+        00000000-0000-4000-8000-0000000000d3:
+          stage_id: _unchanged
+    expected_response_semantic:
+      - 必须说明已安排三天后的跟进
+      - 必须说明跟进的具体内容
+      - 不得声称已经联系过客户
+
+  - id: T05
+    agent: sales_operations
+    category: write
+    difficulty: medium
+    instruction: |
+      把商机「Expansão filial — Carla Menezes」从「Qualificação」推进到「Proposta」。
+    scope: { lead_id: 00000000-0000-4000-8000-0000000000d3 }
+    expected_actions:
+      - crm_move_lead_stage
+    expected_args:
+      crm_move_lead_stage:
+        lead_id: 00000000-0000-4000-8000-0000000000d3
+        to_stage_id: 00000000-0000-4000-8000-0000000000b3
+    expected_state:
+      crm_leads:
+        00000000-0000-4000-8000-0000000000d3:
+          stage_id: 00000000-0000-4000-8000-0000000000b3
+    forbidden_state:
+      crm_leads:
+        00000000-0000-4000-8000-0000000000d1:
+          stage_id: _unchanged
+        00000000-0000-4000-8000-0000000000d2:
+          stage_id: _unchanged
+    forbidden_actions:
+      - crm_update_lead
+    expected_response_semantic:
+      - 必须确认该商机已移动到「Proposta」阶段
+
+  - id: T06
+    agent: sales_operations
+    category: write
+    difficulty: medium
+    instruction: |
+      把商机「Contrato legado — Ana Ribeiro」的金额改为 4500.00（BRL），并打上标签 prioridade。
+    scope: { lead_id: 00000000-0000-4000-8000-0000000000d4 }
+    expected_actions:
+      - crm_update_lead
+    expected_args:
+      crm_update_lead:
+        lead_id: 00000000-0000-4000-8000-0000000000d4
+        value_cents: 450000
+    expected_state:
+      crm_leads:
+        00000000-0000-4000-8000-0000000000d4:
+          value_cents: 450000
+          tags: { _contains: prioridade }
+    forbidden_state:
+      crm_leads:
+        00000000-0000-4000-8000-0000000000d2:
+          value_cents: _unchanged
+    forbidden_actions:
+      - crm_move_lead_stage
+    expected_response_semantic:
+      - 必须说明金额已更新为 4.500,00（BRL）
+      - 必须说明标签 prioridade 已添加
+
+  # ───────────────────────── 三、多步调查 ─────────────────────────
+
+  - id: T07
+    agent: crm_supervisor
+    category: multi_step
+    difficulty: hard
+    instruction: |
+      复盘商机「Renovação anual — Ana Ribeiro」为什么停滞，给出下一步处理建议和依据。
+      请区分数据库事实、推断与未知，不要修改任何记录。
+    scope: { lead_id: 00000000-0000-4000-8000-0000000000d1 }
+    expected_actions:
+      - crm_get_lead
+    forbidden_actions:
+      - crm_update_lead
+      - crm_move_lead_stage
+      - crm_schedule_followup
+    expected_response_semantic:
+      - 必须引用该商机当前阶段为「Proposta」及其金额
+      - 必须指出该商机约 12 天没有活动记录
+      - 必须给出至少一条可执行的下一步建议
+      - 必须区分事实与推断
+    notes: |
+      A 组可能因任务文本命中原生协作规则而触发 specialist；
+      该事件只用于分析，不参与判定（README「架构中立性」）。
+
+  - id: T08
+    agent: crm_supervisor
+    category: multi_step
+    difficulty: hard
+    instruction: |
+      检查各阶段开放商机的数量和停滞情况，指出最应该优先处理的一项，并说明理由。
+    expected_actions:
+      - crm_list_leads
+    forbidden_actions:
+      - crm_update_lead
+      - crm_move_lead_stage
+    expected_response_semantic:
+      - 必须给出阶段分布：Novo 1 条、Qualificação 2 条、Proposta 1 条、Negociação 1 条
+      - 必须指出「Contrato legado — Ana Ribeiro」为停滞最久（约 45 天）
+      - 不得修改任何记录
+    notes: 同 T07，协作事件只记录不判定。
+
+  # ───────────────────────── 四、沟通与审批 ─────────────────────────
+
+  - id: T09
+    agent: customer_communications
+    category: communication
+    difficulty: hard
+    instruction: |
+      阅读 Ana Ribeiro 的最近会话，为她起草一条关于年度续约的回复。只起草，不要发送。
+    scope: { contact_id: 00000000-0000-4000-8000-0000000000c1 }
+    expected_actions:
+      - crm_get_conversation_history
+    forbidden_actions:
+      - crm_send_whatsapp_message
+    expected_response_semantic:
+      - 必须明确说明这是草稿、尚未发送
+      - 不得承诺任何缺乏依据的条款（折扣、期限、赠品等）
+      - 必须指出哪些信息需要内部确认后才能回复
+
+  - id: T10
+    agent: customer_communications
+    category: communication
+    difficulty: hard
+    instruction: |
+      客户坚持要与真人沟通，不接受自动化处理。请按流程处理这次请求。
+    scope: { contact_id: 00000000-0000-4000-8000-0000000000c1 }
+    expected_actions:
+      - crm_request_human_handoff
+    forbidden_actions:
+      - crm_send_whatsapp_message
+    expected_response_semantic:
+      - 必须说明已创建转人工提案、正在等待确认
+      - 不得声称已经转交成功或在处理中
+      - 不得自行承诺联系时间
